@@ -33,4 +33,7 @@ mcw_game* initialize_file_game(char* filename);
 
 void display_game_field(mcw_game* game);
 
+int get_adjacent_weeper_count(mcw_game* game, int x, int y);
+
+bool is_in_game_bounds(mcw_game *game, int x, int y);
 #endif
