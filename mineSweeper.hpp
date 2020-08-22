@@ -42,4 +42,18 @@ void display_game_field(mcw_game* game);
 int get_adjacent_weeper_count(mcw_game* game, int x, int y);
 
 bool is_in_game_bounds(mcw_game *game, int x, int y);
+
+int get_weeper_count(mcw_game* game);
+
+int get_flag_count(mcw_game* game);
+
+void display_game_state(mcw_game* game);
+
+void mark_game_square(mcw_game* game, int x, int y);
+
+void reveal_game_square(mcw_game* game, int x, int y);
+
+bool is_game_over_loss(mcw_game* game);
+
+bool is_game_over_win(mcw_game* game);
 #endif

@@ -1,164 +1,208 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <string>
 #include <iostream>
 
 #include "io-utilities.hpp"
+#include "stringPlus.hpp"
 #include "mineSweeper.hpp"
 
-#define BUFFER_SIZE 1024
-#define MAX_PROBABILITY 100
+#define DEFAULT_PROBABILITY 10
+#define MAX_COMMAND_LENGTH 1024
+// MAX_COMMAND_LENGTH is way more than we need but we err on the side of caution.
 
-#define OPEN_CHAR '.'
-#define WEEPER_CHAR 'W'
+// Helper functions for determining what kind of arguments we got.
+bool dimension_args(int argc, char** argv) {
+    return argc == 3 && is_non_negative_numeral(argv[1]) && is_non_negative_numeral(argv[2]);
+}
 
-mcw_game* alloc_game(int width, int height) {
-    mcw_game* game = (mcw_game*) (malloc(sizeof(mcw_game)));
-    game->width = width;
-    game->height = height;
-    game->field = (mcw_square**) malloc(height * sizeof(mcw_square*));
-    game->status = (mcw_status**) malloc(height * sizeof(mcw_status*));
-    for (int i = 0; i < height; i++) {
-        game->field[i] = (mcw_square*) malloc(width * sizeof(mcw_square));
-        game->status[i] = (mcw_status*) malloc(width * sizeof(mcw_status));
-        for (int x = 0; x < width; x++) {
-            game->field[i][x] = open;
-            game->status[i][x] = hidden;
+bool dimension_and_probability_args(int argc, char** argv) {
+    return argc == 4 && is_non_negative_numeral(argv[1]) && is_non_negative_numeral(argv[2]) &&
+        is_non_negative_numeral(argv[3]);
+}
+
+bool file_args(int argc, char** argv) {
+    return argc == 2;
+}
+
+/*
+ * Creates a game based on the given arguments. If the arguments are invalid, NULL is returned.
+ */
+mcw_game* create_game_based_on_args(int argc, char** argv) {
+    // Check arguments to figure out how to initialize the game.
+    if (dimension_args(argc, argv) || dimension_and_probability_args(argc, argv)) {
+        // We already checked for numerals so we can convert right away.
+        int width = atoi(argv[1]);
+        int height = atoi(argv[2]);
+        int probability = dimension_and_probability_args(argc, argv) ? atoi(argv[3]) : DEFAULT_PROBABILITY;
+
+        if (width < 1 || height < 1) {
+            std:: cout<< "Sorry, but zero dimensions are not allowed." << std::endl;
+            std::cout << std::endl;
+            return NULL;
         }
-    }
-    return game;
-}
 
-void free_game(mcw_game* game) {
-    for (int i = 0; i < game->height; i++) {
-        free(game->field[i]);
-        free(game->status[i]);
-    }
-    free(game->status);
-    free(game->field);
-    free(game);
-}
-
-void show_or_hide(mcw_game* game, int shown) {
-    for (int i = 0; i < game->height; i++) {
-        for (int x = 0; x < game->width; x++) {
-            game->status[i][x] = (mcw_status) shown;
-        }
-    }
-}
-
-void show_all(mcw_game* game) {
-    show_or_hide(game, revealed);
-}
-
-void hide_all(mcw_game* game) {
-    show_or_hide(game, hidden);
-}
-
-mcw_game* initialize_file_game(char* filename) {
-    FILE* game_file = fopen(filename, "r");
-    if (!game_file) {
-        return NULL;
-    }
-
-    char buffer[BUFFER_SIZE];
-    mcw_game* game = NULL;
-    int y = 0;
-    while (!feof(game_file)) {
-        fgets(buffer, BUFFER_SIZE, game_file);
+        return initialize_random_game(width, height, probability);
+    } else if (file_args(argc, argv)) {
+        mcw_game* game = initialize_file_game(argv[1]);
         if (game == NULL) {
-            int width;
-            int height;
-            int successful_scans = sscanf(buffer, "%d %d", &width, &height);
-            if (successful_scans < 2) {
-                fclose(game_file);
-                return NULL;
-            } else {
-                game = alloc_game(width, height);
-                if (game == NULL) {
-                    fclose(game_file);
-                    return NULL;
-                }
-            }
-        } else {
-            if (y >= game->height) {
-                break;
-            }
-
-            int x;
-            for (x = 0; x < game->width; x++) {
-                if (buffer[x] == OPEN_CHAR || buffer[x] == WEEPER_CHAR) {
-                    game->field[y][x] = buffer[x] == OPEN_CHAR ? open : weeper;
-                } else {
-                    fclose(game_file);
-                    return NULL;
-                }
-            }
-
-            y++;
+            puts("Sorry, but something appears to be amiss with the game file.");
+            puts("");
         }
-    }
 
-    fclose(game_file);
-    return game;
-}
-
-int get_adjacent_weeper_count(mcw_game* game, int x, int y) {
-    int count = 0;
-    if(game->field[y][x] != weeper || is_in_game_bounds(game, x, y)) {
-        for(int i = y - 1; i <= y + 1; i++) {
-            for (int w = x - 1; w <= x + 1; w++) {
-                if (is_in_game_bounds(game, w, i) && game->field[i][w] == weeper) {
-                    count++;
-                }
-            }
-        }
-    }
-    return count;
-}
-
-void display_game_field(mcw_game* game) {
-    std::cout << ("  ");
-    for (int i = 0; i < game->width; i ++) {
-        printf(" %d", i);
-    }
-    std::cout << std::endl;
-    for (int y = 0; y < game->height; y++) {
-        printf(" %d", y);
-        for (int x = 0; x < game->width; x++) {
-            if(game->field[y][x] == weeper) {
-                emit_utf_8(WEEPER);
-            } else {
-                int adj = get_adjacent_weeper_count(game, x, y);
-                adj == 0 ? printf("  "):printf(" %d", adj);
-            }
-        }
-        std::cout << std::endl;
-    }
-}
-
-mcw_game* initialize_random_game(int width, int height, int probability) {
-    mcw_game* game = alloc_game(width, height);
-    if (game == NULL) {
+        return game;
+    } else {
         return NULL;
     }
+}
 
-    int threshold = probability > MAX_PROBABILITY ? MAX_PROBABILITY : probability;
+void display_help() {
+    std:: cout<< "You have the following command choices:" << std::endl;
+    std:: cout<< "- 'o <x> <y>' will open a square" << std::endl;
+    std:: cout<< "- 'm <x> <y>' will mark a square" << std::endl;
+    std:: cout<< "- 'h' will display this help listing" << std::endl;
+    std:: cout<< "- 'n' will start a new game" << std::endl;
+    std:: cout<< "- 'q' will quit" << std::endl;
+}
 
-    int x, y;
-    for (y = 0; y < game->height; y++) {
-        for (x = 0; x < game->width; x++) {
-            int mine_roll = random() % MAX_PROBABILITY;
-            game->field[y][x] = mine_roll < threshold ? weeper : open;
+typedef enum {
+    command_handled,
+    command_new,
+    command_unrecognized,
+    command_quit
+} command_result;
+
+command_result process_command(char* command_string, mcw_game* game) {
+    char command;
+    int x;
+    int y;
+
+    // As before, the use of `sscanf` is a little above our level, so it is written for you here.
+    int successful_scans = sscanf(command_string, "%c %d %d", &command, &x, &y);
+    if (successful_scans == 1) {
+        if (command == 'h') {
+            display_help();
+            return command_handled;
+        }
+
+        if (command == 'n' || command == 'q') {
+            // If the player quits or starts over, we display the full board.
+            std:: cout<< "\nGame over! Here is the entire field:\n" << std::endl;
+            show_all(game);
+            display_game_state(game);
+
+            if (command == 'n') {
+                return command_new;
+            }
+
+            if (command == 'q') {
+                return command_quit;
+            }
+        }
+    } else if (successful_scans == 3) {
+        // Range check.
+        if (!is_in_game_bounds(game, x, y)) {
+            printf("Sorry, but either x=%d or y=%d is out of range.\n", x, y);
+            return command_handled;
+        }
+
+        if (command == 'm') {
+            mark_game_square(game, x, y);
+            return command_handled;
+        }
+
+        if (command == 'o') {
+            reveal_game_square(game, x, y);
+            return command_handled;
         }
     }
 
-    hide_all(game);
-    return game;
+    // If we get here, we didn’t know what to do with the command.
+    return command_unrecognized;
 }
 
-bool is_in_game_bounds(mcw_game* game, int x, int y) {
-    if (x >= 0 && x < game->width && y >= 0 && y < game->height) {
-        return true;
+int main(int argc, char** argv) {
+    // Don’t worry about the srandom() call---but don’t change or remove it either!
+    // It’s related to random number generation.
+    srandom(time(NULL));
+
+    mcw_game* game = create_game_based_on_args(argc, argv);
+    if (game == NULL) {
+        emit_utf_8(MARKER);
+        printf(" Welcome to Mine-C-Weeper! ");
+        emit_utf_8(WEEPER);
+        puts("");
+        std:: cout<< "Usage: mine-c-weeper <width> <height> [<weeper frequency>]" << std::endl;
+        std:: cout<< "   or: mine-c-weeper <filename>" << std::endl;
+        std:: cout<< std::endl;
+        printf("The default weeper frequency is %d (i.e., %d%%).\n", DEFAULT_PROBABILITY, DEFAULT_PROBABILITY);
+        std:: cout<< std::endl;
+        std:: cout<< "Caution: File error-checking is minimal, so if the map file is in the wrong format," << std::endl;
+        std:: cout<< "         this program may just terminate without warning." << std::endl;
+        return 1;
     }
-    return false;
+
+    bool done = false;
+    display_help();
+    while (!done) {
+        std:: cout<< std::endl;
+
+        int weeper_count = get_weeper_count(game);
+        int flag_count = get_flag_count(game);
+        printf("There are %d weeper%s here.\n", weeper_count, weeper_count == 1 ? "" : "s");
+        printf("You have planted %d flag%s.\n", flag_count, flag_count == 1 ? "" : "s");
+        std:: cout<< std::endl;
+        display_game_state(game);
+        std:: cout<< std::endl;
+        std:: cout<< "What would you like to do? (enter 'h' for help)" << std::endl;
+
+        char command_string[MAX_COMMAND_LENGTH];
+        fgets(command_string, MAX_COMMAND_LENGTH, stdin);
+        command_result result = process_command(command_string, game);
+
+        // Future languages note: C is one of the few languages where `switch` is a viable alternative.
+        // In most other languages, there are better approaches than `switch`.
+        switch (result) {
+            case command_handled:
+                // All good, nothing further to do.
+                break;
+
+            case command_new:
+                free_game(game);
+                game = create_game_based_on_args(argc, argv);
+                std:: cout << "\nOK, starting over!" << std::endl;
+                break;
+
+            case command_unrecognized:
+                std:: cout << "\nSorry, that command was not recognized." << std::endl;
+                break;
+
+            case command_quit:
+                std:: cout << "\nThank you for playing Mine-C-Weeper!" << std::endl;
+                done = true;
+                break;
+        }
+
+        if (!done) {
+            bool player_lost = is_game_over_loss(game);
+            bool player_won = is_game_over_win(game);
+            if (player_lost || player_won) {
+                std::string message = (player_lost) ? "Sorry, you have revealed a weeper!" :"Congratulations! You have cleared the field.";
+                printf("\n%s Thank you for playing.\n\n", message.c_str());
+                display_game_state(game);
+                std:: cout << std::endl;
+                std:: cout << "Here is the whole field, revealed!" << std::endl;;
+                std:: cout << std::endl;
+                show_all(game);
+                display_game_state(game);
+                std:: cout << std::endl;
+                done = true;
+            }
+        }
+    }
+
+    free_game(game);
+    return 0;
 }
