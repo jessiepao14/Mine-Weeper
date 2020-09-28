@@ -68,11 +68,11 @@ The objective of the game is to clear the entire board without picking on a mine
 <!-- CONTRIBUTING -->
 ## Contributing
 
-Jessie Pao - jessiepao2009@gmail.com
-GitHub - https://github.com/jessiepao14
+Justin Yee - justin.yee529@gmail.com
+GitHub - https://github.com/jyee5
 
 <!-- CONTACT -->
 ## Contact
 
-Justin Yee - justin.yee529@gmail.com
 
+Jessie Pao - jessie.pao.14626@gmail.com
